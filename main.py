@@ -115,6 +115,7 @@ def combine_csv_files():
     df_combined_indoor = pd.DataFrame()
     df_combined_outdoor = pd.DataFrame()
     df_combined_storage = pd.DataFrame()
+    
 
     for csv_file in csv_files:
         df1 = pd.read_csv(csv_file)
@@ -231,36 +232,54 @@ def combine_csv_files():
             # Calculate the count of "Indoor Parking"
             count1_indoor = df_indoor.shape[0]  # Total Units
             count2_indoor = df_indoor[(df_indoor['Lease time'] != 0) & (df_indoor['Lease time'].notna())].shape[0]
-            if count1_indoor == 0:
-                count3_indoor = 0
-            else:
-                count3_indoor = round((count2_indoor / count1_indoor) * 100, 2)
             count4_indoor = df_indoor[df_indoor['Recent move in'] == 1].shape[0]
             count5_indoor = df_indoor[df_indoor['Moving out'] == 1].shape[0]
             count6_indoor_series = df_indoor[df_indoor['Market Rent'] != 0]['Market Rent'].mode()
             count6_indoor = count6_indoor_series.iloc[0] if not count6_indoor_series.empty else 0
+            if count1_indoor == 0:
+                count3_indoor = 0
+                count7_indoor = 0
+                count8_indoor = 0
+                count9_indoor = 0
+            else:
+                count3_indoor = f"{round((count2_indoor / count1_indoor) * 100, 2)}%"
+                count7_indoor = f"{round((count4_indoor / count1_indoor) * 100, 2)}%"
+                count8_indoor = f"{round((count5_indoor / count1_indoor) * 100, 2)}%"
+                count9_indoor = f"{round((count6_indoor / count1_indoor) * 100, 2)}%"
     
             count1_outdoor = df_outdoor.shape[0]  # Total Units
             count2_outdoor = df_outdoor[(df_outdoor['Lease time'] != 0) & (df_outdoor['Lease time'].notna())].shape[0]
-            if count1_outdoor == 0:
-                count3_outdoor = 0
-            else:
-                count3_outdoor = round((count2_outdoor / count1_outdoor) * 100, 2)
             count4_outdoor = df_outdoor[df_outdoor['Recent move in'] == 1].shape[0]
             count5_outdoor = df_outdoor[df_outdoor['Moving out'] == 1].shape[0]
             count6_outdoor_series = df_outdoor[df_outdoor['Market Rent'] != 0]['Market Rent'].mode()
             count6_outdoor = count6_outdoor_series.iloc[0] if not count6_outdoor_series.empty else 0
-    
+            if count1_outdoor == 0:
+                count3_outdoor = 0
+                count7_outdoor = 0
+                count8_outdoor = 0
+                count9_outdoor = 0
+            else:
+                count3_outdoor = f"{round((count2_outdoor / count1_outdoor) * 100, 2)}%"
+                count7_outdoor = f"{round((count4_outdoor / count1_outdoor) * 100, 2)}%"
+                count8_outdoor = f"{round((count5_outdoor / count1_outdoor) * 100, 2)}%"
+                count9_outdoor = f"{round((count6_outdoor / count1_outdoor) * 100, 2)}%"
+            
             count1_storage = df_storage.shape[0]  # Total Units
             count2_storage = df_storage[(df_storage['Lease time'] != 0) & (df_storage['Lease time'].notna())].shape[0]
-            if count1_storage == 0:
-                count3_storage = 0
-            else:
-                count3_storage = round((count2_storage / count1_storage) * 100, 2)
             count4_storage = df_storage[df_storage['Recent move in'] == 1].shape[0]
             count5_storage = df_storage[df_storage['Moving out'] == 1].shape[0]
             count6_storage_series = df_storage[df_storage['Market Rent'] != 0]['Market Rent'].mode()
             count6_storage = count6_storage_series.iloc[0] if not count6_storage_series.empty else 0
+            if count1_storage == 0:
+                count3_storage = 0
+                count7_storage = 0
+                count8_storage = 0
+                count9_storage = 0
+            else:
+                count3_storage = f"{round((count2_storage / count1_storage) * 100, 2)}%"
+                count7_storage = f"{round((count4_storage / count1_storage) * 100, 2)}%"
+                count8_storage = f"{round((count5_storage / count1_storage) * 100, 2)}%"
+                count9_storage = f"{round((count6_storage / count1_storage) * 100, 2)}%"  
     
             Final_df.loc[Final_df['Property Code'] == property_code, f'Total Units ({date_obj.strftime("%Y%b")}) (Indoor Parking)'] = count1_indoor
             Final_df.loc[Final_df['Property Code'] == property_code, f'Occupied ({date_obj.strftime("%Y%b")}) (Indoor Parking)'] = count2_indoor
@@ -268,6 +287,9 @@ def combine_csv_files():
             Final_df.loc[Final_df['Property Code'] == property_code, f'New Lease ({date_obj.strftime("%Y%b")}) (Indoor Parking)'] = count4_indoor
             Final_df.loc[Final_df['Property Code'] == property_code, f'Ending Lease ({date_obj.strftime("%Y%b")}) (Indoor Parking)'] = count5_indoor
             Final_df.loc[Final_df['Property Code'] == property_code, f'Price ({date_obj.strftime("%Y%b")}) (Indoor Parking)'] = count6_indoor
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Lease_Turnover_Rate ({date_obj.strftime("%Y%b")}) (Indoor Parking)'] = count7_indoor
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Ending_Lease_Rate ({date_obj.strftime("%Y%b")}) (Indoor Parking)'] = count8_indoor
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Price_per_Unit ({date_obj.strftime("%Y%b")}) (Indoor Parking)'] = count9_indoor
             
             Final_df.loc[Final_df['Property Code'] == property_code, f'Total Units ({date_obj.strftime("%Y%b")}) (Outdoor Parking)'] = count1_outdoor
             Final_df.loc[Final_df['Property Code'] == property_code, f'Occupied ({date_obj.strftime("%Y%b")}) (Outdoor Parking)'] = count2_outdoor
@@ -275,6 +297,9 @@ def combine_csv_files():
             Final_df.loc[Final_df['Property Code'] == property_code, f'New Lease ({date_obj.strftime("%Y%b")}) (Outdoor Parking)'] = count4_outdoor
             Final_df.loc[Final_df['Property Code'] == property_code, f'Ending Lease ({date_obj.strftime("%Y%b")}) (Outdoor Parking)'] = count5_outdoor
             Final_df.loc[Final_df['Property Code'] == property_code, f'Price ({date_obj.strftime("%Y%b")}) (Outdoor Parking)'] = count6_outdoor
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Lease_Turnover_Rate ({date_obj.strftime("%Y%b")}) (Outdoor Parking)'] = count7_outdoor
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Ending_Lease_Rate ({date_obj.strftime("%Y%b")}) (Outdoor Parking)'] = count8_outdoor
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Price_per_Unit ({date_obj.strftime("%Y%b")}) (Outdoor Parking)'] = count9_outdoor
             
             Final_df.loc[Final_df['Property Code'] == property_code, f'Total Units ({date_obj.strftime("%Y%b")}) (Storage)'] = count1_storage
             Final_df.loc[Final_df['Property Code'] == property_code, f'Occupied ({date_obj.strftime("%Y%b")}) (Storage)'] = count2_storage
@@ -282,50 +307,62 @@ def combine_csv_files():
             Final_df.loc[Final_df['Property Code'] == property_code, f'New Lease ({date_obj.strftime("%Y%b")}) (Storage)'] = count4_storage
             Final_df.loc[Final_df['Property Code'] == property_code, f'Ending Lease ({date_obj.strftime("%Y%b")}) (Storage)'] = count5_storage
             Final_df.loc[Final_df['Property Code'] == property_code, f'Price ({date_obj.strftime("%Y%b")}) (Storage)'] = count6_storage
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Lease_Turnover_Rate ({date_obj.strftime("%Y%b")}) (Storage)'] = count7_storage
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Ending_Lease_Rate ({date_obj.strftime("%Y%b")}) (Storage)'] = count8_storage
+            Final_df.loc[Final_df['Property Code'] == property_code, f'Price_per_Unit ({date_obj.strftime("%Y%b")}) (Storage)'] = count9_storage
             
         df_indoor_parking = Final_df[['Property Code'] + [f'Total Units ({date_obj.strftime("%Y%b")}) (Indoor Parking)',
                                                          f'Occupied ({date_obj.strftime("%Y%b")}) (Indoor Parking)',
                                                          f'Percentage ({date_obj.strftime("%Y%b")}) (Indoor Parking)',
                                                          f'New Lease ({date_obj.strftime("%Y%b")}) (Indoor Parking)',
                                                          f'Ending Lease ({date_obj.strftime("%Y%b")}) (Indoor Parking)',
-                                                         f'Price ({date_obj.strftime("%Y%b")}) (Indoor Parking)']].copy()
+                                                         f'Price ({date_obj.strftime("%Y%b")}) (Indoor Parking)',
+                                                         f'Lease_Turnover_Rate ({date_obj.strftime("%Y%b")}) (Indoor Parking)',
+                                                         f'Ending_Lease_Rate ({date_obj.strftime("%Y%b")}) (Indoor Parking)',
+                                                         f'Price_per_Unit ({date_obj.strftime("%Y%b")}) (Indoor Parking)']].copy()
         
         df_outdoor_parking = Final_df[['Property Code'] + [f'Total Units ({date_obj.strftime("%Y%b")}) (Outdoor Parking)',
                                                           f'Occupied ({date_obj.strftime("%Y%b")}) (Outdoor Parking)',
                                                           f'Percentage ({date_obj.strftime("%Y%b")}) (Outdoor Parking)',
                                                           f'New Lease ({date_obj.strftime("%Y%b")}) (Outdoor Parking)',
                                                           f'Ending Lease ({date_obj.strftime("%Y%b")}) (Outdoor Parking)',
-                                                          f'Price ({date_obj.strftime("%Y%b")}) (Outdoor Parking)']].copy()
+                                                          f'Price ({date_obj.strftime("%Y%b")}) (Outdoor Parking)',
+                                                          f'Lease_Turnover_Rate ({date_obj.strftime("%Y%b")}) (Outdoor Parking)',
+                                                          f'Ending_Lease_Rate ({date_obj.strftime("%Y%b")}) (Outdoor Parking)',
+                                                          f'Price_per_Unit ({date_obj.strftime("%Y%b")}) (Outdoor Parking)']].copy()
         
         df_storage = Final_df[['Property Code'] + [f'Total Units ({date_obj.strftime("%Y%b")}) (Storage)',
                                                    f'Occupied ({date_obj.strftime("%Y%b")}) (Storage)',
                                                    f'Percentage ({date_obj.strftime("%Y%b")}) (Storage)',
                                                    f'New Lease ({date_obj.strftime("%Y%b")}) (Storage)',
                                                    f'Ending Lease ({date_obj.strftime("%Y%b")}) (Storage)',
-                                                   f'Price ({date_obj.strftime("%Y%b")}) (Storage)']].copy()
+                                                   f'Price ({date_obj.strftime("%Y%b")}) (Storage)',
+                                                   f'Lease_Turnover_Rate ({date_obj.strftime("%Y%b")}) (Storage)',
+                                                   f'Ending_Lease_Rate ({date_obj.strftime("%Y%b")}) (Storage)',
+                                                   f'Price_per_Unit ({date_obj.strftime("%Y%b")}) (Storage)']].copy()
                 
                         # Concatenate dataframes to combined dataframes
         df_combined_indoor = pd.concat([df_combined_indoor, df_indoor_parking], axis=1)
         df_combined_outdoor = pd.concat([df_combined_outdoor, df_outdoor_parking], axis=1)
         df_combined_storage = pd.concat([df_combined_storage, df_storage], axis=1)
         
-        # final_df[f'Price_per_Unit({date_obj.strftime("%Y%b")})'] = final_df['2022July price'] / final_df['Total Units']
-        # final_df[f'Occupancy_Rate({date_obj.strftime("%Y%b")})'] = final_df['2022July Occupied'] / final_df['Total Units']
-        # final_df[f'Lease_Turnover_Rate({date_obj.strftime("%Y%b")})'] = final_df['2022July New Lease'] / final_df['Total Units']
-        # final_df[f'Ending_Lease_Rate({date_obj.strftime("%Y%b")})'] = final_df['2022July Ending Lease'] / final_df['Total Units']
+        df_combined_indoor = df_combined_indoor.loc[:,~df_combined_indoor.columns.duplicated()].copy()
+        df_combined_outdoor = df_combined_outdoor.loc[:,~df_combined_outdoor.columns.duplicated()].copy()
+        df_combined_storage = df_combined_storage.loc[:,~df_combined_storage.columns.duplicated()].copy()
+
         
-        # duplicated_columns = df_combined_indoor.columns[df_combined_indoor.columns.duplicated(keep='first')]
-        # df_combined_indoor = df_combined_indoor.drop(columns=duplicated_columns)
-        # duplicated_columns = df_combined_outdoor.columns[df_combined_outdoor.columns.duplicated(keep='first')]
-        # df_combined_outdoor = df_combined_outdoor.drop(columns=duplicated_columns)
-        # duplicated_columns = df_combined_storage.columns[df_combined_storage.columns.duplicated(keep='first')]
-        # df_combined_storage = df_combined_storage.drop(columns=duplicated_columns)
+        # Check if the "Final datasets" folder exists, and create it if not
+        output_folder = "Final datasets"
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+    
+        indoor_parking_csv_file = os.path.join(output_folder, 'indoor_parking.csv')
+        outdoor_parking_csv_file = os.path.join(output_folder, 'outdoor_parking.csv')
+        storage_csv_file = os.path.join(output_folder, 'storage.csv')
             
-            
-            
-        df_combined_indoor.to_csv('indoor_storage.csv', index=False)
-        df_combined_outdoor.to_csv('outdoor_storage.csv', index=False)
-        df_combined_storage.to_csv('storage.csv', index=False)
+        df_combined_indoor.to_csv(indoor_parking_csv_file, index=False)
+        df_combined_outdoor.to_csv(outdoor_parking_csv_file, index=False)
+        df_combined_storage.to_csv(storage_csv_file, index=False)
         
         st.success("CSV files saved successfully.")
 
