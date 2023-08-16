@@ -413,7 +413,7 @@ def combine_csv_files():
         
         st.success("CSV files saved successfully.")
         
-def Opt(data):
+def Opt(data,user_input):
     # Define the month names
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     
@@ -483,7 +483,8 @@ def Opt(data):
     model.price_lower_limit_constraint = Constraint(data.index, rule=price_lower_limit_constraint_rule)
     
     # Define the upper limit constraint for each property's price (must be <= 1.1 times market price)
-    price_upper_limit = 1.1 # Can be changed
+    #price_upper_limit = 1.1
+    price_upper_limit = user_input # Can be changed
     def price_upper_limit_constraint_rule(model, i):
         prefix = f'Market Price ({recent_month_str})'
         return model.price[i] <= price_upper_limit * data.loc[i, [col for col in data.columns if col.startswith(prefix)][0]]
@@ -558,12 +559,13 @@ def main():
         combine_csv_files()
 
     st.title("Optimization")
+    user_input = st.number_input("Enter a float number for price upper limit(default = 1.1)", step=0.01)  # Prompt user for input
     
     
     if st.button("Run Indoor Parking Optimization"):
         st.write("Running Indoor Parking Optimization on selected CSV file...")
         data = pd.read_csv("Final datasets\indoor_parking.csv")
-        Indoor_optimal_prices,Indoor_max_revenue = Opt(data)
+        Indoor_optimal_prices,Indoor_max_revenue = Opt(data,user_input)
         optimal_prices_df = pd.DataFrame({'Optimal Prices (Indoor)': Indoor_optimal_prices})
         Property_code = data.iloc[:, 0]
         Indoor_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
@@ -574,8 +576,9 @@ def main():
         
     if st.button("Run Outdoor Parking Optimization"):
         st.write("Running Outdoor Parking Optimization on selected CSV file...")
+        #user_input = st.number_input("Enter a float number for price upper limit(default = 1.1)", step=0.01)  # Prompt user for input
         data = pd.read_csv("Final datasets\outdoor_parking.csv")
-        Outdoor_optimal_prices,Outdoor_max_revenue = Opt(data)
+        Outdoor_optimal_prices,Outdoor_max_revenue = Opt(data,user_input)
         optimal_prices_df = pd.DataFrame({'Optimal Prices (Outdoor)': Outdoor_optimal_prices})
         Property_code = data.iloc[:, 0]
         Outdoor_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
@@ -585,8 +588,9 @@ def main():
 
     if st.button("Run Storage Optimization"):
         st.write("Running Storage Optimization on selected CSV file...")
+        #user_input = st.number_input("Enter a float number for price upper limit(default = 1.1)", step=0.01)  # Prompt user for input
         data = pd.read_csv("Final datasets\storage.csv")
-        Storage_optimal_prices,Storage_max_revenue = Opt(data)
+        Storage_optimal_prices,Storage_max_revenue = Opt(data,user_input)
         optimal_prices_df = pd.DataFrame({'Optimal Prices (Storage)': Storage_optimal_prices})
         Property_code = data.iloc[:, 0]
         Storage_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
