@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,6 +7,9 @@ import os
 import glob
 import re
 from datetime import datetime
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from pyomo.environ import *
 
 def validate_file_data_format(filename):
     # Check if the file has .xlsx extension
@@ -407,6 +412,92 @@ def combine_csv_files():
         df_combined_storage.to_csv(storage_csv_file, index=False)
         
         st.success("CSV files saved successfully.")
+        
+def Opt(data):
+    # Define the month names
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    # Define the function to get the most recent month and year from the dataset
+    def get_recent_month_year(df_storage):
+        all_months = sorted([col.split(' ')[1][1:-1] for col in df_storage.columns if "Percentage%" in col])
+        recent_month = all_months[-1]
+        recent_year = int(recent_month[:4])
+        recent_month_name = recent_month[4:]
+        recent_month_num = month_names.index(recent_month_name) + 1
+        return recent_month_num, recent_year
+    
+    
+    # Get the recent month and year
+    recent_month, recent_year = get_recent_month_year(data)
+    recent_month_str = f'{recent_year}{month_names[recent_month - 1]}'
+    target_month = (recent_month % 12) + 1
+    target_year = recent_year if recent_month != 12 else recent_year + 1
+    
+    # Select relevant columns for the regression model
+    feature_columns = [col for col in data.columns if col not in ['Property Code'] and not col.startswith(f'Percentage% ({recent_month_str})')]
+    #feature_columns = [col for col in df_storage.columns if col not in ['Property Code', f'Percentage% ({recent_month_str}) (Storage)']]
+    target_column_prefix = f'Percentage% ({recent_month_str})'
+    target_column = [col for col in data.columns if col.startswith(target_column_prefix)][0]
+
+    #target_column = f'Percentage% ({recent_month_str}) (Storage)'
+
+    
+    # Prepare the data
+    X = data[feature_columns]
+    y = data[target_column]
+    
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+     
+    # Initialize and train the Random Forest model
+    rf = RandomForestRegressor(random_state=42)
+    rf.fit(X_train, y_train)
+    
+    # Get feature importances
+    importances = rf.feature_importances_
+    features_importances = sorted(zip(importances, X.columns), reverse=True)
+    
+    # Select the most important features
+    important_features = [name for importance, name in features_importances if importance > 0.01]
+    
+    # Prepare the data with only the most important features
+    X = data[important_features]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Predict the target variable for the test data
+    
+    # Create a concrete model
+    model = ConcreteModel()
+    
+    # Define the decision variables
+    model.price = Var(data.index, domain=NonNegativeReals)
+    
+    # Define the objective function
+    def objective_rule(model):
+        return sum(data.loc[i, target_column] * model.price[i] for i in data.index)
+    model.objective = Objective(rule=objective_rule, sense=maximize)
+    
+    # Define the lower limit constraint for each property's price (must be >= market price)
+    def price_lower_limit_constraint_rule(model, i):
+        prefix = f'Market Price ({recent_month_str})'
+        return model.price[i] >= data.loc[i, [col for col in data.columns if col.startswith(prefix)][0]]
+    model.price_lower_limit_constraint = Constraint(data.index, rule=price_lower_limit_constraint_rule)
+    
+    # Define the upper limit constraint for each property's price (must be <= 1.1 times market price)
+    price_upper_limit = 1.1 # Can be changed
+    def price_upper_limit_constraint_rule(model, i):
+        prefix = f'Market Price ({recent_month_str})'
+        return model.price[i] <= price_upper_limit * data.loc[i, [col for col in data.columns if col.startswith(prefix)][0]]
+    model.price_upper_limit_constraint = Constraint(data.index, rule=price_upper_limit_constraint_rule)
+         
+    solver = SolverFactory('glpk')
+    solver.solve(model)
+    
+    # After solving the model
+    optimal_prices = [model.price[i].value for i in data.index]
+    max_revenue = model.objective()
+    
+    return optimal_prices,max_revenue
+    
 
 
 # Streamlit app
@@ -465,6 +556,44 @@ def main():
     combine_button = st.button("Combine CSV Files")
     if combine_button:
         combine_csv_files()
+
+    st.title("Optimization")
+    
+    
+    if st.button("Run Indoor Parking Optimization"):
+        st.write("Running Indoor Parking Optimization on selected CSV file...")
+        data = pd.read_csv("Final datasets\indoor_parking.csv")
+        Indoor_optimal_prices,Indoor_max_revenue = Opt(data)
+        optimal_prices_df = pd.DataFrame({'Optimal Prices (Indoor)': Indoor_optimal_prices})
+        Property_code = data.iloc[:, 0]
+        Indoor_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
+        st.subheader("Indoor Price for next month")
+        st.write(Indoor_optimal_prices_df)
+        Indoor_optimal_prices_df.to_csv('Indoor_optimal_prices.csv', index=False)
+        
+        
+    if st.button("Run Outdoor Parking Optimization"):
+        st.write("Running Outdoor Parking Optimization on selected CSV file...")
+        data = pd.read_csv("Final datasets\outdoor_parking.csv")
+        Outdoor_optimal_prices,Outdoor_max_revenue = Opt(data)
+        optimal_prices_df = pd.DataFrame({'Optimal Prices (Outdoor)': Outdoor_optimal_prices})
+        Property_code = data.iloc[:, 0]
+        Outdoor_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
+        st.subheader("Outdoor Price for next month")
+        st.write(Outdoor_optimal_prices_df)
+        Outdoor_optimal_prices_df.to_csv('Outdoor_optimal_prices.csv', index=False)
+
+    if st.button("Run Storage Optimization"):
+        st.write("Running Storage Optimization on selected CSV file...")
+        data = pd.read_csv("Final datasets\storage.csv")
+        Storage_optimal_prices,Storage_max_revenue = Opt(data)
+        optimal_prices_df = pd.DataFrame({'Optimal Prices (Storage)': Storage_optimal_prices})
+        Property_code = data.iloc[:, 0]
+        Storage_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
+        st.subheader("Storage Price for next month")
+        st.write(Storage_optimal_prices_df)
+        Storage_optimal_prices_df.to_csv('Storage_optimal_prices.csv', index=False)
+    
 
 
 
