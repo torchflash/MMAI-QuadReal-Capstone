@@ -1,27 +1,36 @@
 
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import os
 import glob
 import re
+import matplotlib.pyplot as plt
+
+from PIL import Image
 from datetime import datetime
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from pyomo.environ import *
+import st_aggrid
+#from st_aggrid.grid_options_builder import GridOptionsBuilder
 
+
+
+@st.cache
 def validate_file_data_format(filename):
     # Check if the file has .xlsx extension
     if not filename.endswith('.xlsx'):
         raise ValueError('Invalid file format. Please upload a .xlsx file.')
-        
+
+@st.cache        
 def validate_file_price_format(filename, valid_formats):
     # Check if the file has a valid format
     if not filename.lower().endswith(valid_formats):
         raise ValueError(f'Invalid file format. Please upload a {valid_formats} file.')
 
 
+@st.cache
 def validate_file_data_name(filename):
     # Extract the year and month from the file name
     name_parts = os.path.splitext(filename)[0].split()
@@ -29,17 +38,20 @@ def validate_file_data_name(filename):
         raise ValueError('Invalid file name format. Please use "year month" format.')
     year, month = name_parts
 
+@st.cache
 def validate_file_price_name(filename, expected_name):
     if filename.lower() != expected_name.lower():
         raise ValueError(f'Invalid file name. Please upload a file named "{expected_name}", instead of "{filename}".')
 
+@st.cache
 def validate_file_data_columns(df):
     required_columns = ['Code', 'Description', 'Market Rent', 'Lease From', 'Lease To']
     missing_columns = [col for col in required_columns if col not in df.columns]
 
     if missing_columns:
         raise ValueError(f'The following columns are missing: {", ".join(missing_columns)}')
-        
+ 
+@st.cache       
 def validate_worksheet_variables(worksheet, expected_variables):
     # Check if the worksheet contains all the expected variables in the third row
     header_row = 2  # Assuming the header row is the third row (index 2)
@@ -50,6 +62,7 @@ def validate_worksheet_variables(worksheet, expected_variables):
             raise ValueError(f'Variable "{variable}" not found in the worksheet.')
 
 
+@st.cache
 def process_data_file(file):
     validate_file_data_format(file.name)
     validate_file_data_name(file.name)
@@ -64,13 +77,13 @@ def process_data_file(file):
     # Save the DataFrame as a CSV file with the same name as the original file
     csv_filename = file.name.split()[0] + ' ' + file.name.split()[1][:3] + '.csv'
     df.to_csv(csv_filename, index=False)
-    st.success(f'File successfully processed and saved as {csv_filename}.')
 
 def is_valid_year_format(input_str):
     # Regular expression pattern to check if the input is a four-digit year
     year_pattern = r'^\d{4}$'
     return bool(re.match(year_pattern, input_str))    
-    
+
+@st.cache    
 def process_price_file(file, expected_name,indooryear,outdooryear,storageyear):
     
     if not is_valid_year_format(indooryear) or not is_valid_year_format(outdooryear)or not is_valid_year_format(storageyear):
@@ -127,11 +140,13 @@ def process_price_file(file, expected_name,indooryear,outdooryear,storageyear):
     st.success(f'Parking Rev sheet successfully saved as {parking_rev_csv_filename}.')
     st.success(f'Storage Rev sheet successfully saved as {storage_rev_csv_filename}.')
 
+@st.cache
 def generate_dataframe(file_path):
     # Read CSV file into a DataFrame
     df = pd.read_csv(file_path)
     return df
 
+@st.cache
 def generate_dataframe_name(file_name):
     # Extract year and month from the file name
     year, month = file_name.split()
@@ -140,7 +155,7 @@ def generate_dataframe_name(file_name):
 
 
 
-
+@st.cache
 def combine_csv_files():
     csv_files = [filename for filename in os.listdir() if re.match(r'\d{4}\s\w+\.csv', filename)]
     csv_files = sorted(csv_files, key=lambda x: pd.Timestamp(re.findall(r'\d{4}\s\w+', x)[0]))
@@ -411,9 +426,10 @@ def combine_csv_files():
         df_combined_outdoor.to_csv(outdoor_parking_csv_file, index=False)
         df_combined_storage.to_csv(storage_csv_file, index=False)
         
-        st.success("CSV files saved successfully.")
         
-def Opt(data,user_input):
+ 
+@st.cache       
+def Opt(data,upper_limit,lower_limit):
     # Define the month names
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     
@@ -430,8 +446,16 @@ def Opt(data,user_input):
     # Get the recent month and year
     recent_month, recent_year = get_recent_month_year(data)
     recent_month_str = f'{recent_year}{month_names[recent_month - 1]}'
-    target_month = (recent_month % 12) + 1
-    target_year = recent_year if recent_month != 12 else recent_year + 1
+    # target_month = (recent_month % 12) + 1
+    # target_year = recent_year if recent_month != 12 else recent_year + 1
+    
+    # Get the previous month and year
+    previous_month = (recent_month - 2) % 12 + 1
+    previous_year = recent_year if previous_month != 12 else recent_year - 1
+    
+    # Get the column name for the previous month's current prices
+    previous_month_prefix =  f'Current Price ({previous_year}{month_names[previous_month - 1]})'
+    previous_month_column = [col for col in data.columns if col.startswith(previous_month_prefix)][0]
     
     # Select relevant columns for the regression model
     feature_columns = [col for col in data.columns if col not in ['Property Code'] and not col.startswith(f'Percentage% ({recent_month_str})')]
@@ -476,55 +500,123 @@ def Opt(data,user_input):
         return sum(data.loc[i, target_column] * model.price[i] for i in data.index)
     model.objective = Objective(rule=objective_rule, sense=maximize)
     
-    # Define the lower limit constraint for each property's price (must be >= market price)
-    def price_lower_limit_constraint_rule(model, i):
-        prefix = f'Market Price ({recent_month_str})'
-        return model.price[i] >= data.loc[i, [col for col in data.columns if col.startswith(prefix)][0]]
-    model.price_lower_limit_constraint = Constraint(data.index, rule=price_lower_limit_constraint_rule)
+    # Remove the existing constraints from the model
+    if hasattr(model, 'price_lower_limit_constraint'):
+        model.del_component(model.price_lower_limit_constraint)
+    if hasattr(model, 'price_upper_limit_constraint'):
+        model.del_component(model.price_upper_limit_constraint)
     
-    # Define the upper limit constraint for each property's price (must be <= 1.1 times market price)
-    #price_upper_limit = 1.1
-    price_upper_limit = user_input # Can be changed
+    # Ask the user for the upper limit percentage (e.g. 1.1 for 110% of market price)
+    price_upper_limit = upper_limit #Can be changed
+    
+    # Define the upper limit constraint for each property's price (must be <= specified percentage of market price)
     def price_upper_limit_constraint_rule(model, i):
         prefix = f'Market Price ({recent_month_str})'
         return model.price[i] <= price_upper_limit * data.loc[i, [col for col in data.columns if col.startswith(prefix)][0]]
     model.price_upper_limit_constraint = Constraint(data.index, rule=price_upper_limit_constraint_rule)
-         
+    
+    # Ask the user for the lower limit percentage (e.g. 0.9 for 90% of market price)
+    price_lower_limit = lower_limit # Can be changed
+    
+    def price_lower_limit_constraint_rule(model, i):
+        prefix = f'Market Price ({recent_month_str})'
+        return model.price[i] >= data.loc[i, [col for col in data.columns if col.startswith(prefix)][0]]
+    model.price_lower_limit_constraint = Constraint(data.index, rule=price_lower_limit_constraint_rule)
+     
     solver = SolverFactory('glpk')
     solver.solve(model)
     
     # After solving the model
     optimal_prices = [model.price[i].value for i in data.index]
-    max_revenue = model.objective()
+    #max_revenue = model.objective()
     
-    return optimal_prices,max_revenue
+    previous_month_current_prices = data[previous_month_column]
+    
+    return optimal_prices,previous_month_current_prices,data
     
 
 
 # Streamlit app
 def main():
-    st.title("File Uploader")
+    st.set_page_config(
+      page_title="QuadReal - Parking & Storage Revenue Optimization PILOT",
+      page_icon="",
+      initial_sidebar_state="collapsed",
+      layout="wide"
+    )
+    
+    hide_st_style = '''
+      <style>
+        # header {visibility: hidden;}
+        footer {visibility: hidden;}
+        # ul {display: none;}
+        # div[data-testid="stSidebarNav"] {display: none;}
+        .block-container {
+          padding-top: 2rem;
+          padding-bottom: 0rem;
+          padding-left: 1rem;
+          padding-right: 1rem;
+        }
+      </style>
+    '''
+    
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+    
+    st.sidebar.info(
+      '''
+      Add application info here. \n
+      Copyright &copy; 2023 - QuadReal Properties Group LP - ED&A Team. All rights reserved.
+      ''')
+    
+    display = Image.open("img/quadreal-logo.png")
+    display = np.array(display)
+    
+    logo, title = st.columns([1, 5])
+    with logo:
+      st.image(display, width = 150)
+    with title:
+      title = st.title("QuadReal | Parking & Storage Revenue Optimization `v.0.1.0`")
 
-    uploaded_file = st.file_uploader("Upload file(s)", type="xlsx", accept_multiple_files=True)
-    specific_file = st.file_uploader("Upload specific file", type="xlsx")
+
+    uploaded_file = st.file_uploader("Upload monthly data file(s) Please use the format of 'year month'" , type="xlsx", accept_multiple_files=True)
 
     if uploaded_file is not None:
-        for file in uploaded_file:
-            try:
-                process_data_file(file)
-            except ValueError as e:
-                st.error(str(e))
+        all_files_processed_successfully = True
+        
+        with st.spinner("Processing..."):
+            for file in uploaded_file:
+                try:
+                    process_data_file(file)
+                except ValueError as e:
+                    st.error(str(e))
+                    all_files_processed_successfully = False
+            if all_files_processed_successfully and len(uploaded_file) > 0:
+                st.success('Monthly data file(s) successfully processed and saved.')
+            elif len(uploaded_file) == 0:
+                x = 1
+            
+        
+    indooryear = st.text_input("What year is the first indoor parking comp price?", "")
+    outdooryear = st.text_input("What year is the first outdoor parking comp price?", "")
+    storageyear = st.text_input("What year is the first storage parking comp price?", "")
+    specific_file = st.file_uploader("Upload specific file", type="xlsx")
+    if specific_file is not None: 
+        all_files_processed_successfully = True
+        
+        with st.spinner("Processing..."):
+            if not indooryear or not outdooryear or not storageyear:
+                st.error("Please enter values for all year inputs.")
+                all_files_processed_successfully = False
+            else:
+                try:
+                    process_price_file(specific_file, "Parking Storage Rev Final v1.xlsx",indooryear,outdooryear,storageyear)
     
-    if specific_file is not None:
-        indooryear = st.text_input("What year is the first indoor parking comp price?", "")
-        outdooryear = st.text_input("What year is the first outdoor parking comp price?", "")
-        storageyear = st.text_input("What year is the first storage parking comp price?", "")
-        
-        
-        try:
-            process_price_file(specific_file, "Parking Storage Rev Final v1.xlsx",indooryear,outdooryear,storageyear)
-        except ValueError as e:
-            st.error(str(e))
+                except ValueError as e:
+                    st.error(str(e))
+                    all_files_processed_successfully = False
+            if all_files_processed_successfully:
+                st.success('Parking Rev sheet successfully saved .')
+                st.success('Storage Rev sheet successfully saved .')
     
     run_code = st.button("Run Code")
 
@@ -556,47 +648,91 @@ def main():
         
     combine_button = st.button("Combine CSV Files")
     if combine_button:
-        combine_csv_files()
+        with st.spinner("Combining CSV files..."):
+            combine_csv_files()
+            st.success("CSV files saved successfully.")
 
     st.title("Optimization")
-    user_input = st.number_input("Enter a float number for price upper limit(default = 1.1)", step=0.01)  # Prompt user for input
+    upper_limit = st.number_input("Enter a float number for price upper limit(default = 1.1)", step=0.01)  # Prompt user for input
+    lower_limit = st.number_input("Enter a float number for price lower limit(default = 0.9)", step=0.01)  # Prompt user for input
     
     
     if st.button("Run Indoor Parking Optimization"):
-        st.write("Running Indoor Parking Optimization on selected CSV file...")
-        data = pd.read_csv("Final datasets\indoor_parking.csv")
-        Indoor_optimal_prices,Indoor_max_revenue = Opt(data,user_input)
-        optimal_prices_df = pd.DataFrame({'Optimal Prices (Indoor)': Indoor_optimal_prices})
-        Property_code = data.iloc[:, 0]
-        Indoor_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
-        st.subheader("Indoor Price for next month")
-        st.write(Indoor_optimal_prices_df)
-        Indoor_optimal_prices_df.to_csv('Indoor_optimal_prices.csv', index=False)
+        with st.spinner("Running Indoor Parking Optimization on selected CSV file..."):
+            data = pd.read_csv("Final datasets\indoor_parking.csv")
+            Indoor_optimal_prices,previous_month_current_prices,dataset = Opt(data,upper_limit,lower_limit)
+            
+            plt.figure(figsize=(12, 6))
+            plt.plot(dataset.index, Indoor_optimal_prices, label='Optimized Prices')
+            plt.plot(dataset.index, previous_month_current_prices, label='Previous Month Current Prices')
+            plt.xlabel('Properties')
+            plt.ylabel('Prices')
+            plt.legend()
+            plt.title('Comparison of Optimized Prices and Previous Month Current Prices')
+            
+            st.pyplot(plt)
+            plt.show()
+            
+            Indoor_df = pd.DataFrame({
+            'Property Code': dataset['Property Code'],
+            'Optimized Prices': Indoor_optimal_prices,
+            'Previous Month Current Prices': previous_month_current_prices,
+            'Difference': [optimal - previous for optimal, previous in zip(Indoor_optimal_prices, previous_month_current_prices)]})
+            st.subheader("Indoor Price for next month")
+            ag_grid = st_aggrid.AgGrid(Indoor_df, height=300)
+            Indoor_df.to_csv('Indoor_optimal_prices.csv', index=False)
         
         
     if st.button("Run Outdoor Parking Optimization"):
-        st.write("Running Outdoor Parking Optimization on selected CSV file...")
+        with st.spinner("Running Outdoor Parking Optimization on selected CSV file..."):
         #user_input = st.number_input("Enter a float number for price upper limit(default = 1.1)", step=0.01)  # Prompt user for input
-        data = pd.read_csv("Final datasets\outdoor_parking.csv")
-        Outdoor_optimal_prices,Outdoor_max_revenue = Opt(data,user_input)
-        optimal_prices_df = pd.DataFrame({'Optimal Prices (Outdoor)': Outdoor_optimal_prices})
-        Property_code = data.iloc[:, 0]
-        Outdoor_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
-        st.subheader("Outdoor Price for next month")
-        st.write(Outdoor_optimal_prices_df)
-        Outdoor_optimal_prices_df.to_csv('Outdoor_optimal_prices.csv', index=False)
+            data = pd.read_csv("Final datasets\outdoor_parking.csv")
+            Outdoor_optimal_prices,previous_month_current_prices,dataset = Opt(data,upper_limit,lower_limit)
+            
+            plt.figure(figsize=(12, 6))
+            plt.plot(dataset.index, Outdoor_optimal_prices, label='Optimized Prices')
+            plt.plot(dataset.index, previous_month_current_prices, label='Previous Month Current Prices')
+            plt.xlabel('Properties')
+            plt.ylabel('Prices')
+            plt.legend()
+            plt.title('Comparison of Optimized Prices and Previous Month Current Prices')
+            
+            st.pyplot(plt)
+            plt.show()
+            
+            Outdoor_df = pd.DataFrame({
+            'Property Code': dataset['Property Code'],
+            'Optimized Prices': Outdoor_optimal_prices,
+            'Previous Month Current Prices': previous_month_current_prices,
+            'Difference': [optimal - previous for optimal, previous in zip(Outdoor_optimal_prices, previous_month_current_prices)]})
+            st.subheader("Outdoor Price for next month")
+            ag_grid = st_aggrid.AgGrid(Outdoor_df, height=300)
+            Outdoor_df.to_csv('Outdoor_optimal_prices.csv', index=False)
 
     if st.button("Run Storage Optimization"):
-        st.write("Running Storage Optimization on selected CSV file...")
-        #user_input = st.number_input("Enter a float number for price upper limit(default = 1.1)", step=0.01)  # Prompt user for input
-        data = pd.read_csv("Final datasets\storage.csv")
-        Storage_optimal_prices,Storage_max_revenue = Opt(data,user_input)
-        optimal_prices_df = pd.DataFrame({'Optimal Prices (Storage)': Storage_optimal_prices})
-        Property_code = data.iloc[:, 0]
-        Storage_optimal_prices_df = pd.concat([Property_code, optimal_prices_df], axis=1)
-        st.subheader("Storage Price for next month")
-        st.write(Storage_optimal_prices_df)
-        Storage_optimal_prices_df.to_csv('Storage_optimal_prices.csv', index=False)
+        with st.spinner("Running Storage Optimization on selected CSV file..."):
+            data = pd.read_csv("Final datasets\storage.csv")
+            Storage_optimal_prices,previous_month_current_prices,dataset = Opt(data,upper_limit,lower_limit)
+            
+            plt.figure(figsize=(12, 6))
+            plt.plot(dataset.index, Storage_optimal_prices, label='Optimized Prices')
+            plt.plot(dataset.index, previous_month_current_prices, label='Previous Month Current Prices')
+            plt.xlabel('Properties')
+            plt.ylabel('Prices')
+            plt.legend()
+            plt.title('Comparison of Optimized Prices and Previous Month Current Prices')
+            
+            st.pyplot(plt)
+            plt.show()
+            
+            Storage_df = pd.DataFrame({
+            'Property Code': dataset['Property Code'],
+            'Optimized Prices': Storage_optimal_prices,
+            'Previous Month Current Prices': previous_month_current_prices,
+            'Difference': [optimal - previous for optimal, previous in zip(Storage_optimal_prices, previous_month_current_prices)]})
+            st.subheader("Storage Price for next month")
+            ag_grid = st_aggrid.AgGrid(Storage_df, height=300)
+            Storage_df.to_csv('Storage_optimal_prices.csv', index=False)
     
 
 
