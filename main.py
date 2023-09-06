@@ -7,6 +7,7 @@ import glob
 import re
 import matplotlib.pyplot as plt
 
+from docx import Document
 from PIL import Image
 from datetime import datetime
 from sklearn.model_selection import train_test_split
@@ -15,7 +16,10 @@ from pyomo.environ import *
 import st_aggrid
 #from st_aggrid.grid_options_builder import GridOptionsBuilder
 
-
+def display_manual(path):
+    doc = Document(path)
+    text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+    st.write(text)
 
 @st.cache
 def validate_file_data_format(filename):
@@ -83,7 +87,7 @@ def is_valid_year_format(input_str):
     year_pattern = r'^\d{4}$'
     return bool(re.match(year_pattern, input_str))    
 
-@st.cache    
+@st.cache(suppress_st_warning=True)
 def process_price_file(file, expected_name,indooryear,outdooryear,storageyear):
     
     if not is_valid_year_format(indooryear) or not is_valid_year_format(outdooryear)or not is_valid_year_format(storageyear):
@@ -526,6 +530,14 @@ def Opt(data,upper_limit,lower_limit):
         model.del_component(model.price_lower_limit_constraint)
     if hasattr(model, 'price_upper_limit_constraint'):
         model.del_component(model.price_upper_limit_constraint)
+        
+        # Competitor price constraints for Indoor
+    for i in data.index:
+        year = recent_month_str.split()[0]
+        if year in ['2022', '2023']:  # This list can be extended for future years
+            constraint_column = [column for column in data.columns if year in column and "Comp price" in column]
+            if constraint_column in data.columns:
+                model.add_constraint(model.price[i] <= 1.05 * data.loc[i, constraint_column])
     
     # Ask the user for the upper limit percentage (e.g. 1.1 for 110% of market price)
     price_upper_limit = upper_limit #Can be changed
@@ -588,6 +600,13 @@ def main():
       Add application info here. \n
       Copyright &copy; 2023 - QuadReal Properties Group LP - ED&A Team. All rights reserved.
       ''')
+      
+
+    show_manual = st.sidebar.checkbox("Show Manual")
+    if show_manual:
+        path = "User_Manual.docx"
+        display_manual(path)
+
     
     display = Image.open("img/quadreal-logo.png")
     display = np.array(display)
@@ -620,7 +639,7 @@ def main():
     indooryear = st.text_input("What year is the first indoor parking comp price?", "")
     outdooryear = st.text_input("What year is the first outdoor parking comp price?", "")
     storageyear = st.text_input("What year is the first storage parking comp price?", "")
-    specific_file = st.file_uploader("Upload specific file", type="xlsx")
+    specific_file = st.file_uploader("Upload the file contain comp prices'Parking Storage Rev Final v1.xlsx'", type="xlsx")
     if specific_file is not None: 
         all_files_processed_successfully = True
         
@@ -639,7 +658,7 @@ def main():
                 st.success('Parking Rev sheet successfully saved .')
                 st.success('Storage Rev sheet successfully saved .')
     
-    run_code = st.button("Run Code")
+    run_code = st.button("Show current datasets")
 
     if run_code:
         # Get a list of all CSV files in the current directory
@@ -683,35 +702,6 @@ def main():
             data = pd.read_csv("Final datasets\indoor_parking.csv")
             Indoor_optimal_prices,previous_month_current_prices,dataset,y_test,y_pred,lower_bound_updated,upper_bound_updated = Opt(data,upper_limit,lower_limit)
             
-            # Scatter plot of actual vs. predicted values
-            plt.scatter(y_test, y_pred, color='blue')
-            plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--', lw=4, color='red')
-            plt.xlabel('Actual Occupancy Percentage')
-            plt.ylabel('Predicted Occupancy Percentage')
-            plt.title('Actual vs. Predicted Occupancy Percentage (Indoor Parking)')
-            st.pyplot(plt)
-            plt.show()
-            
-            # Scatter plot of actual vs. predicted values
-            plt.figure(figsize=(10, 6))
-            plt.scatter(y_test, y_pred, color='blue')
-            plt.fill_between([y_test.min(), y_test.max()], lower_bound_updated, upper_bound_updated, color='grey', alpha=0.2)
-            plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--', lw=4, color='red')
-            plt.xlabel('Actual Occupancy Percentage')
-            plt.ylabel('Predicted Occupancy Percentage')
-            plt.title('Actual vs. Predicted Occupancy Percentage (Indoor Parking) with Confidence Interval')
-            st.pyplot(plt)
-            plt.show()
-            
-            # Residual plot
-            residuals_indoor = y_test - y_pred
-            plt.scatter(y_pred, residuals_indoor, color='green')
-            plt.hlines(y=0, xmin=y_pred.min(), xmax=y_pred.max(), colors='red', linestyles='dashed')
-            plt.xlabel('Predicted Occupancy Percentage')
-            plt.ylabel('Residuals')
-            plt.title('Residual Plot (Indoor Parking)')
-            st.pyplot(plt)
-            plt.show()
 
             
             plt.figure(figsize=(12, 6))
@@ -740,35 +730,6 @@ def main():
             data = pd.read_csv("Final datasets\outdoor_parking.csv")
             Outdoor_optimal_prices,previous_month_current_prices,dataset,y_test,y_pred,lower_bound_updated,upper_bound_updated = Opt(data,upper_limit,lower_limit)
  
-            # Scatter plot of actual vs. predicted values
-            plt.scatter(y_test, y_pred, color='blue')
-            plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--', lw=4, color='red')
-            plt.xlabel('Actual Occupancy Percentage')
-            plt.ylabel('Predicted Occupancy Percentage')
-            plt.title('Actual vs. Predicted Occupancy Percentage (Outdoor Parking)')
-            st.pyplot(plt)
-            plt.show()
-            
-            # Scatter plot of actual vs. predicted values
-            plt.figure(figsize=(10, 6))
-            plt.scatter(y_test, y_pred, color='blue')
-            plt.fill_between([y_test.min(), y_test.max()], lower_bound_updated, upper_bound_updated, color='grey', alpha=0.2)
-            plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--', lw=4, color='red')
-            plt.xlabel('Actual Occupancy Percentage')
-            plt.ylabel('Predicted Occupancy Percentage')
-            plt.title('Actual vs. Predicted Occupancy Percentage (Outdoor Parking) with Confidence Interval')
-            st.pyplot(plt)
-            plt.show()
-            
-            # Residual plot
-            residuals_indoor = y_test - y_pred
-            plt.scatter(y_pred, residuals_indoor, color='green')
-            plt.hlines(y=0, xmin=y_pred.min(), xmax=y_pred.max(), colors='red', linestyles='dashed')
-            plt.xlabel('Predicted Occupancy Percentage')
-            plt.ylabel('Residuals')
-            plt.title('Residual Plot (Outdoor Parking)')
-            st.pyplot(plt)
-            plt.show()     
             
             plt.figure(figsize=(12, 6))
             plt.plot(dataset.index, Outdoor_optimal_prices, label='Optimized Prices')
@@ -794,36 +755,7 @@ def main():
         with st.spinner("Running Storage Optimization on selected CSV file..."):
             data = pd.read_csv("Final datasets\storage.csv")
             Storage_optimal_prices,previous_month_current_prices,dataset,y_test,y_pred,lower_bound_updated,upper_bound_updated = Opt(data,upper_limit,lower_limit)
- 
-            # Scatter plot of actual vs. predicted values
-            plt.scatter(y_test, y_pred, color='blue')
-            plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--', lw=4, color='red')
-            plt.xlabel('Actual Occupancy Percentage')
-            plt.ylabel('Predicted Occupancy Percentage')
-            plt.title('Actual vs. Predicted Occupancy Percentage (Storage)')
-            st.pyplot(plt)
-            plt.show()
-            
-            # Scatter plot of actual vs. predicted values
-            plt.figure(figsize=(10, 6))
-            plt.scatter(y_test, y_pred, color='blue')
-            plt.fill_between([y_test.min(), y_test.max()], lower_bound_updated, upper_bound_updated, color='grey', alpha=0.2)
-            plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--', lw=4, color='red')
-            plt.xlabel('Actual Occupancy Percentage')
-            plt.ylabel('Predicted Occupancy Percentage')
-            plt.title('Actual vs. Predicted Occupancy Percentage (Storage) with Confidence Interval')
-            st.pyplot(plt)
-            plt.show()
-            
-            # Residual plot
-            residuals_indoor = y_test - y_pred
-            plt.scatter(y_pred, residuals_indoor, color='green')
-            plt.hlines(y=0, xmin=y_pred.min(), xmax=y_pred.max(), colors='red', linestyles='dashed')
-            plt.xlabel('Predicted Occupancy Percentage')
-            plt.ylabel('Residuals')
-            plt.title('Residual Plot (Storage)')
-            st.pyplot(plt)
-            plt.show()            
+       
             plt.figure(figsize=(12, 6))
             plt.plot(dataset.index, Storage_optimal_prices, label='Optimized Prices')
             plt.plot(dataset.index, previous_month_current_prices, label='Previous Month Current Prices')
